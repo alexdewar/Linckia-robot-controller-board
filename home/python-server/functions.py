@@ -6,7 +6,11 @@
 #direct commands which makes control and AI code
 #much more human readable
 
-import time as t
+# Edited by Chris Walker
+# - 11/11/15 Added tnk command to drive motors separately
+#			Also added Timer to set how long to drive for
+
+import time
 import var
 import logging
 import socket
@@ -18,6 +22,9 @@ from wrap import Serial
 import math
 from serial.serialutil import SerialException
 
+import threading
+
+timer = "empty"
 
 def set(target,position, time = 0, duration = 0, delay = 0):
 	target, position = int(target), int(position)
@@ -49,31 +56,10 @@ def get(target, time = 0, duration = 0, delay = 0):
 	if var.devices[0][2].inWaiting()>0:
 		discard = var.devices[0][2].read(var.devices[0][2].inWaiting())
 
-def wheel(wheel_id, speed, accel_duration=0):
-	direction = 0
-	if speed<0:
-		direction=1
-	command = chr(255)+chr(1)+chr(wheel_id)+chr(direction)+chr(abs(speed))+chr(accel_duration)+chr(0)+chr(254)
-	var.devices[0][2].write(command)
-
 def mov(power,turn=0,time = 0, duration = 0, delay = 0):
 	power, turn, time, duration, delay = int(power), int(turn), int(time), int(duration), int(delay)
-	x = math.cos(math.radians(turn))*power
-	y = math.sin(math.radians(turn))*power
-	if abs(turn)==90:
-		var.turn = 90
-		set(0,160)
-		set(1,160)
-		set(2,160)
-		t.sleep(4)
-	elif turn<>var.turn:
-		var.turn = turn
-		set(0, 45-turn)
-		set(1, 45+turn)
-		set(2, 45-turn)
-		if turn<>0:
-			if var.speed<>power:
-				t.sleep(3)
+	x = math.cos(math.radians(turn))*power*var.motors[0]/100
+	y = math.sin(math.radians(turn))*power*var.motors[3]/100
 	right = x+ y
 	left = x - y
 	direction = 0
@@ -81,18 +67,48 @@ def mov(power,turn=0,time = 0, duration = 0, delay = 0):
 		direction = 1
 		right = abs(right)
 	commandRight1 = chr(255)+chr(1)+chr(1)+chr(direction)+chr(int(round(right)))+chr(duration)+chr(0)+chr(254)
-	commandRight2 = chr(255)+chr(1)+chr(3)+chr(direction)+chr(int(round(right)))+chr(duration)+chr(0)+chr(254)
+	commandRight2 = chr(255)+chr(1)+chr(2)+chr(direction)+chr(int(round(right)))+chr(duration)+chr(0)+chr(254)
 	direction = 0
 	if left <0:
-		direction = 1
+		direction =1
 		left = abs(left)
-	commandLeft1 = chr(255)+chr(1)+chr(2)+chr(direction)+chr(int(round(left)))+chr(duration)+chr(0)+chr(254)
+	commandLeft1 = chr(255)+chr(1)+chr(3)+chr(direction)+chr(int(round(left)))+chr(duration)+chr(0)+chr(254)
 	commandLeft2 = chr(255)+chr(1)+chr(4)+chr(direction)+chr(int(round(left)))+chr(duration)+chr(0)+chr(254)
-	var.speed = power
 	var.devices[0][2].write(commandRight1)
 	var.devices[0][2].write(commandRight2)
 	var.devices[0][2].write(commandLeft1)
 	var.devices[0][2].write(commandLeft2)
+
+
+def tnk(leftmotor, rightmotor, time=0, duration = 0):
+	leftmotor, rightmotor, time, duration = int(leftmotor), int(rightmotor), int(time), int(duration)
+	left = leftmotor*var.motors[0]/100
+	right = rightmotor*var.motors[3]/100
+	direction = 0
+	if right <0:
+		direction = 1
+		right = abs(right)
+	commandRight1 = chr(255)+chr(1)+chr(1)+chr(direction)+chr(int(round(right)))+chr(duration)+chr(0)+chr(254)
+	commandRight2 = chr(255)+chr(1)+chr(2)+chr(direction)+chr(int(round(right)))+chr(duration)+chr(0)+chr(254)
+	direction = 0
+	if left <0:
+		direction =1
+		left = abs(left)
+	commandLeft1 = chr(255)+chr(1)+chr(3)+chr(direction)+chr(int(round(left)))+chr(duration)+chr(0)+chr(254)
+	commandLeft2 = chr(255)+chr(1)+chr(4)+chr(direction)+chr(int(round(left)))+chr(duration)+chr(0)+chr(254)
+	# Spawn timer thread to stop moving after delay
+	global timer
+	if timer != "empty":
+		timer.cancel()
+	if time > 0:
+		timer = threading.Timer(time, Stop)
+		timer.start()
+	var.devices[0][2].write(commandRight1)
+	var.devices[0][2].write(commandRight2)
+	var.devices[0][2].write(commandLeft1)
+	var.devices[0][2].write(commandLeft2)
+
+
 
 
 def arm(positions,times = [0,0,0,0,0]):
@@ -103,4 +119,3 @@ def arm(positions,times = [0,0,0,0,0]):
 def Stop():
 	"sets wheels to start position - stops wheels"
 	mov(0)
-
